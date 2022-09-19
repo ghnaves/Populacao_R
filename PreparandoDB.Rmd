@@ -1,0 +1,817 @@
+---
+title: "Pirâmides etárias e outros gráficos de população"
+author:
+  name: Gustavo Henrique Naves Givisiez
+  affiliation: Departamento de Geografia de Campos - Universidade Federal Fluminense
+  affiliation_url: http://geografiacampos.uff.br/
+date: "26 de abril de 2022"
+output:
+  html_document:
+    theme: journal
+    highlight: monochrome
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    css: styles.css
+    df_print: kable
+    number_sections: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  word_document:
+    toc: yes
+    toc_depth: '3'
+subtitle: Tópicos Especiais em Métodos Quantitativos - UFF Campos
+bibliography: /Users/gustavonaves/Documents/Mendeley Desktop/library.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<dicas>**Observações:** (1). Este documento foi desenvolvido como uma nota de aula e é parte integrante do curso de Tópicos Especiais em Métodos Quantitativos, ofertado para o curso de geografia da Universidade Federal Fluminense, *campus* de Campos dos Goytacazes, no 1º semestre de 2022. Sinta-se livre para divulga-lo desde que referencie o documento original.</dicas>
+
+<dicas>(2). Este conteúdo foi preparado para ser desenvolvido no [RStudio](rstudio.com), que é uma interface gráfica do [R](r-project.org).</dicas>
+
+*Sugestão de referência:*
+
+> <dicas>GIVISIEZ, Gustavo Henrique Naves. Preparando e Limpando Banco de Dados [R Markdown Document]. . Campos dos Goytacazes (RJ): RPubs. Disponível em: <https://rpubs.com/ghnaves/PreparandoDB>. Acesso em: 26 abr. 2022. , 2022</dicas>
+
+
+# Introdução
+
+# Fonte de dados
+As bases de dados usadas nas atividades são baseadas em dados históricos e projetados da população mundial, organizada por países e regiões [@PopulationDivision2019]. Os dados originais podem ser consultados no site da [World Population Division, vinculado à ONU](https://population.un.org/wpp/)
+
+Os dados usados nesse exercício podem ser baixados no arquivo compactado `DB.zip` disponível nesse [link](https://drive.google.com/open?id=1UGnA2OzXyYwb_XWjh15fj759nb8k7h0w&authuser=gh_naves%40id.uff.br&usp=drive_fs). Os arquivos são:
+
+* [WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.XLSX](https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/EXCEL_FILES/1_Population/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx): Quinquennial Population by Five-Year Age Groups - Male. De facto population as of 1 July of the year indicated classified by five-year age groups (0-4, 5-9, 10-14, ..., 95-99, 100+). Data are presented in thousands.
+
+* [WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.XLSX](https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/EXCEL_FILES/1_Population/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx): Quinquennial Population by Five-Year Age Groups - Female. De facto population as of 1 July of the year indicated classified by five-year age groups (0-4, 5-9, 10-14, ..., 95-99, 100+). Data are presented in thousands.
+
+* Arquivos adicionais com a documentação foram incluidos no arquivo DB.zip, sendo eles:
++ _WPP2019_Data-Sources_ : Descrição das fontes de dados das projeções, país a país.
++ _WPP2019_F01_LOCATIONS.xlsx_ : Arquivo que auxilia o entendimento das subdivisões regionais, países e territórios.
++ _WPP2019_F02_METADATA.xlsx_ : Descrição de todos os campos de cada uma das tabelas geradas pela projeção
+
+Inicialmente, criem um novo _projeto_, um novo _script_ e salvem os arquivos acima referenciados na pasta do projeto.
+
+# Leitura das Bases
+
+A importação dos dados não nos traz tabelas utilizáveis a princípio. Mas, deem uma investigada nos arquivos excel e vamos tentar entender o banco de dados da ONU.
+
+```{r, warning=F, message=F}
+library(tidyverse)
+library(readxl)
+inicio<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx')
+str(inicio)
+```
+
+O processamento incial deve considerar organização dessas bases de dados. A intenção é criar um banco de dados com as seguintes variáveis:
+
+- _variant_: Tipo do dado (Estimativa da População: Medium Variant, Low Variant e High Variant)
+- _region_: Nome da região, subregion, país ou área.
+- _cntycode_: Código a região, subregion, país ou área.
+- _type_: identificação do tipo (World Label/Separator, Development Group, Special other, Income Group, Region, SDG region, Subregion, Country/Area ou SDG subregion)
+- _parentcode_: Código da regiao em que o _cntycode_ está contido.
+- _sex_: Sexo
+- _idgr_: grupos quinquenais de idade
+- _year_: Ano de referencia
+
+## Estimativas populacionais entre 1950 e 2020
+
+```{r, warning=F, message=F}
+est.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                    range='B17:AC3842',sheet='ESTIMATES',col_names = T)
+
+str(est.male)
+
+```
+
+Importou tudo como `character` e coluna _Notes_ não nos interessa. Percebam que o comando importou os nomes das colunas que estão originalmente na linha 17 do Excel: `range='B17:AC3842'`
+
+```{r, warning=F, message=F}
+
+col_types <- c("text","text","skip","numeric","text", rep("numeric",23))
+
+est.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                    range='B17:AC3842',
+                sheet='ESTIMATES', col_names = T,
+                col_types = col_types)
+
+str(est.male)
+```
+Posso até importar com os nomes das colunas, usando a opção `col_nacmes = T`, como feito anteriormente, mas os nomes não serão queles que nós queremos.
+
+Para definir o nome das colunas, existem duas formas:
+
+1). Como o comando `colnames` é possível renomear as colunas do data.frame.
+
+```{r, warning=F, message=F}
+colnames<-c('variant','region','cntycode','type','parentcode','year',
+            '0-4','5-9','10-14','15-19', '20-24',
+            '25-29','30-34','35-39','40-44','45-49',
+            '50-54','55-59','60-64','65-69','70-74',
+            '75-79','80-84','85-89','90-94','95-99','100+')
+
+colnames(est.male) <-colnames
+str(est.male)
+```
+
+2). Ou importar e, no meso comando, informar os nomes para o comando `read_xlsx` no argumento colnames (`col_names = colnames`). Percebam que para importar informando os nomes das colunas, o argumento range não pode incluir a linha que contém os nomes (Linha 17 no Excel) - range agora é `range='B18:AC3842'`
+
+```{r, warning=F, message=F}
+est.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                    range='B18:AC3842',
+                sheet='ESTIMATES',
+                col_names = colnames,
+                col_types = col_types)
+str(est.male)
+```
+
+Repetir o mesmo comando para as mulheres
+
+```{r, warning=F, message=F}
+est.female<-read_xlsx('./DB/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx',
+                      range='B18:AC3842',
+                sheet='ESTIMATES',col_names = colnames,
+                col_types = col_types)
+
+
+```
+
+## Projeção da população de 2020 a 2100
+
+Seria basicamente replicar os comandos anteriores para importar as demais planilhas contidos nos arquivos (percebam que o orgumento `range` mudou).
+
+```{r, warning=F, message=F}
+
+medium.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                       range='B18:AC4352',
+                sheet='MEDIUM VARIANT',col_names = colnames,
+                col_types = col_types)
+
+medium.female<-read_xlsx('./DB/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx',
+                         range='B18:AC4352',
+                sheet='MEDIUM VARIANT',col_names = colnames,
+                col_types = col_types)
+
+high.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                     range='B18:AC4352',
+                sheet='HIGH VARIANT',col_names = colnames,
+                col_types = col_types)
+
+high.female<-read_xlsx('./DB/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx',
+                       range='B18:AC4352',
+                sheet='HIGH VARIANT',col_names = colnames,
+                col_types = col_types)
+
+low.male<-read_xlsx('./DB/WPP2019_POP_F07_2_POPULATION_BY_AGE_MALE.xlsx',
+                    range='B18:AC4352',
+                sheet='LOW VARIANT',col_names = colnames,
+                col_types = col_types)
+
+low.female<-read_xlsx('./DB/WPP2019_POP_F07_3_POPULATION_BY_AGE_FEMALE.xlsx',
+                      range='B18:AC4352',
+                sheet='LOW VARIANT',col_names = colnames,
+                col_types = col_types)
+
+
+```
+
+Na sequencia o importante é criar uma variável que identique o sexo da população estimada e projetada.
+
+```{r, warning=F, message=F}
+est.male <- est.male %>%
+  mutate(sex='Male')
+
+est.female <- est.female %>%
+  mutate(sex='Female')
+
+medium.male <- medium.male %>%
+  mutate(sex='Male')
+
+medium.female <- medium.female %>%
+  mutate(sex='Female')
+
+low.male <- low.male %>%
+  mutate(sex='Male')
+
+low.female <- low.female %>%
+  mutate(sex='Female')
+
+high.male <- high.male %>%
+  mutate(sex='Male')
+
+high.female <- high.female %>%
+  mutate(sex='Female')
+
+#### OU
+
+#high.female$sex<-'Female'
+# ...
+
+```
+
+
+O próximo passo é agregar os banco de dados com comandos `rbind` que pode ser traduzido como _ligar_ ou _vincular_ por linhas ( _r_ de _row_). Para isso as colunas devem ter sempre os mesmos nomes e o mesmo tipo.
+
+<dicas> **Dica**: O uso de um vetor do tipo _colnames_ e _coltypes_  evita erros de dgitação. </dicas>
+
+```{r, warning=F, message=F}
+
+pop<-est.male %>%
+  rbind(est.female)%>%
+  rbind(medium.male)%>%
+  rbind(medium.female)%>%
+  rbind(low.male)%>%
+  rbind(low.female)%>%
+  rbind(high.female)%>%
+  rbind(high.male)
+
+```
+
+O próxima passo é o mais complicado: transformar as colunas dos grupos de idades em uma variável. Esse comando altera os dados de _wide_ ( _largo_ em ingles) para _long_ ( _comprido_ em ingles). Para ver como esse comando funciona nesse [link do youtube](https://youtu.be/2KF7ovJZUYw). Os comandos a seguir replicam os comandos `gather` ( _reunir_  em inglês) e `spread` desse vídeo do Youtube. Essas funções fazem parte do pacote `tidyr` que é caregado conjuntamente no comando `library(tidyverse)` rodado anteriormete.
+
+```{r, warning=F, message=F}
+library(tidyverse)
+dados_wide<-tibble(pais=c('Brasil','Alemanha'),`2002`=c(2,0),`2014`=c(1,7))
+dados_wide
+
+dados_long<-dados_wide%>%
+  gather(key=ano,value=gols,-pais)
+
+dados_long
+
+dados_wide2 <- dados_long %>%
+  spread(key=ano, value=gols)
+dados_wide2
+```
+O nosso banco de dados `pop` está no formato _wide_. A ideia é tranformar no formato _long_ com a variável _idgr_ identificando o grupo quinquenal de idade. Para isso usamos a função `gather` no banco de dados de população. Precisamos manter várias colunas (e não apenas a coluna país). Para isso, veja o código a seguir:
+
+```{r, warning=F, message=F}
+pop<-pop %>%
+  gather(key=idgr,value=pop,
+         -c('variant','region','cntycode','type','parentcode','year','sex'))
+```
+
+Outro ponto válido é transformar algumas variáveis para o tipo fator. Isso sempre gera gráficos mais interessantes.
+
+```{r, warning=F, message=F}
+pop<-pop %>%
+  mutate(variant=factor(variant),
+         type=factor(type),
+         year=factor(year,ordered=T,
+                     levels=seq(1950,2100,5)),
+         sex=factor(sex),
+         idgr=factor(idgr,ordered=T,
+                     levels=c('0-4','5-9','10-14','15-19', '20-24', '25-29',
+                            '30-34','35-39','40-44','45-49','50-54','55-59',
+                            '60-64','65-69','70-74','75-79','80-84','85-89',
+                            '90-94','95-99','100+')))
+```
+
+# Gráficos associados a esse banco de dados.
+
+Agora o banco de dados está quase pronto no formato _long_, o próximo passo é fazer pirâmides etárias e outros gráficos de interesse. Mas, a organização deste banco de ados da ONU considera várias agregaç!oes espaciais. Sendo assim, o banco de dados ainda precisa de alguns filtros a partir do data.frame _pop_
+
+## População do Mundo x Ano
+
+A variavel `region` e a `cntycode` identificam a região em análise. Elas podem ser regiões (Ásia, por exemplo) ou apenas um país (Brazil, por exemplo). Para entender como os bancos de ados da ONU se organizam consultem o arquivo `WPP2019_F01_LOCATIONS.XLSX`. 
+
+```{r, warning=F, message=F}
+#World
+
+pop_World<-pop%>%
+  filter(region=='WORLD')
+
+library(scales)
+library(hrbrthemes)
+
+#th<-theme_ipsum_pub()
+th<-theme_ipsum() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+temp<-pop_World%>%
+  group_by(year,variant)%>%
+  summarise(pop=sum(pop))
+
+ggplot(data=temp,aes(x=year,y=pop,group=variant,col=variant))+
+  geom_line(size=1)+
+  scale_y_continuous(name='População (em bil.)',
+                     labels=label_comma(big.mark = '.',
+                                        decimal.mark = ',',scale=10^-6))+
+  scale_x_discrete(name='Ano')+
+  scale_color_discrete(name='Variante')+
+  th
+```
+
+``` {r}
+temp<-pop_World%>%
+  filter(year=='2020')
+
+ggplot(data=temp,aes(x=idgr,y=pop,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  ggtitle('Pirâmide Etária 2020 - Mundo')+
+  scale_y_continuous(name='População (Total)',
+                     labels=label_number(big.mark = '.',decimal.mark = ',',
+                                         scale=10^-6))+
+  scale_x_discrete(name='Grupo de Idade')+
+  scale_fill_discrete(name='Sexo')+
+  th
+```
+
+```{r}
+temp<-pop_World%>%
+  filter(year=='2020')%>%
+  mutate(poppir=if_else(sex=='Male',-pop,pop))
+
+ggplot(data=temp,aes(x=idgr,y=poppir,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  ggtitle('Pirâmide Etária 2020 - Mundo')+
+scale_y_continuous(name='População (Total em Bilhões de Hab.)',
+                     labels=label_number(big.mark = '.',decimal.mark = ',',
+                                         scale=10^-6))+
+  scale_x_discrete(name='Grupo de Idade')+
+  scale_fill_discrete(name='Sexo')+
+  th
+```
+
+```{r}
+temp<-pop_World%>%
+  filter(year=='2020')%>%
+  group_by(sex,idgr)%>%
+  summarise(pop=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/(sum(pop)))%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+  
+
+th<-theme_ipsum()+
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=1,size=8),
+        axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1,size=8))
+
+ggplot(data=temp,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  ggtitle('Pirâmide Etária 2020 - Mundo')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.08,.08,.02),limits=c(-.08,.08))+
+  scale_x_discrete(name='Grupo de Idade')+
+  scale_fill_discrete(name='Sexo')+
+  th
+```
+
+```{r}
+temp<-pop_World%>%
+  filter(year %in% seq(1950,2100,50))%>%
+  filter(year=='2020' & variant %in% c('Estimates'))%>%
+  group_by(sex,idgr,year)%>%
+  summarise(pop=sum(pop))%>%
+  ungroup()%>%
+  group_by(year)%>%
+  mutate(poprel=pop/(sum(pop)))%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))%>%
+  ungroup()
+
+th<-theme_ipsum()+
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=1,size=8),
+        axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1,size=8))
+
+ggplot(data=temp,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  facet_wrap(~year)+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  ggtitle('Pirâmide Etária 2020 - Mundo')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.08,.08,.02),limits=c(-.08,.08))+
+  scale_x_discrete(name='Grupo de Idade')+
+  scale_fill_discrete(name='Sexo')+
+  th
+```
+
+```{r, warning=F, message=F}
+
+levels(pop$type)
+
+# World Bank income groups
+  # 1. High-income countries
+  # 2. Middle-income countries
+  #   2.2 Upper-middle-income countries
+  #   2.2 Lower-middle-income countries
+  # 3. Low-income countries
+  # 4. No income group available
+
+pop_Income<-pop%>%
+  filter(type=="Income Group" & region != 'Middle-income countries')%>%
+  mutate(region=factor(region,ordered=T,
+         levels=c("Low-income countries",
+                  "Lower-middle-income countries",
+                  "Upper-middle-income countries",
+                  "High-income countries",
+                  "No income group available"
+                  )))
+
+ggplot(data=pop_Income,aes(x=year,y=pop,group=region,col=region))+
+  geom_line(size=1)+
+  scale_y_continuous(name='População (em bil.)',
+                     labels=label_comma(big.mark = '.',
+                                        decimal.mark = ',',scale=10^-6))+
+  scale_x_discrete(name='Ano')+
+  scale_color_discrete(name='Variante')+
+  th
+
+
+
+temp<-pop_Income%>%
+  filter(type=='Income Group',variant %in% c('Estimates','Medium variant'))%>%
+  group_by(year,region)%>%
+  summarise(pop=sum(pop))
+
+ggplot(data=temp,aes(x=year,y=pop,group=region,col=region))+
+  geom_line(size=1)+
+  scale_y_continuous(name='População (em bil.)',
+                     labels=label_comma(big.mark = '.',
+                                        decimal.mark = ',',scale=10^-6))+
+  scale_x_discrete(name='Ano')+
+  scale_color_discrete(name='Variante')+
+  th
+
+
+```
+
+Nota-se  que a linha para o ano 2020 aparece nas estimativas e também nas projeções. E, por isso, elea é somada duas vezes oacasionando esse "soluço" no gráfico.  Uma solução é, por exemplo, excluir as linhas em que a variavel `year==2020` e que `variant=='Estimates'`. 
+
+```{r, warning=F, message=F}
+
+temp<-pop_Income%>%
+  filter(type=='Income Group',variant %in% c('Estimates','Medium variant'))%>%
+  filter(!(year==2020 & variant=='Estimates'))%>%
+  group_by(year,region)%>%
+  summarise(pop=sum(pop))
+
+
+ggplot(data=temp,aes(x=year,y=pop,group=region,col=region))+
+  geom_line(size=1)+
+  scale_y_continuous(name='População (em bil.)',
+                     labels=label_comma(big.mark = '.',
+                                        decimal.mark = ',',scale=10^-6))+
+  scale_x_discrete(name='Ano')+
+  scale_color_discrete(name='Grupo de renda')+
+  th
+
+  ##knitr::purl('PreparandoDB.Rmd')
+  
+```
+
+
+```{r}
+library(ggsci)
+library(scales)
+library(hrbrthemes)
+library(gridExtra)
+
+Gapminder<-readRDS('Gapminder.rds')
+
+Gapminder_1880a2020<- Gapminder %>%
+  filter(time %in% seq(1900,2040,40))
+
+ggplot(data=Gapminder_1880a2020,aes(y=tfr,x=le,color=WB_income2017))+
+  geom_point()+
+  scale_x_continuous(labels=comma)+
+  labs(x='Esperança de vida', y = 'Taxa de Fecundidade Total',color='Regiões do Mundo')+
+  facet_wrap(~time)
+
+ggplot(data=Gapminder_1880a2020,aes(y=tfr,x=ipp,color=six_regions))+
+  geom_point()+
+  scale_x_log10(labels=comma)+
+  labs(x='Renda Per Capita', y = 'Taxa de Fecundidade Total',color='Regiões do Mundo')+
+  facet_wrap(~time)
+
+ggplot(data=Gapminder_1880a2020,aes(y=le,x=ipp,color=four_regions))+
+  geom_point()+
+  scale_x_log10(labels=comma)+
+  labs(x='Renda Per Capita', y = 'Esperança de vida',color='Regiões do Mundo')+
+  facet_wrap(~time)
+```
+
+```{r}
+Gapminder_Varios<- Gapminder %>%
+  filter((name == 'Brazil'|name=='Japan'
+          |name=='Nigeria'|name == 'United Kingdom')&
+           time<=2050)
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 10),
+        legend.text = element_text(size = 8),
+        axis.text=element_text(size = 8))
+
+ggtfr<-ggplot(data=Gapminder_Varios,aes(y=tfr,x=time,color=name))+
+  geom_line()+
+  ggtitle('Taxa de Fecundidade Total por ano e país')+
+  scale_x_continuous(breaks = seq(1800,2100,25))+
+  scale_color_startrek()+
+  labs(x='Ano', y = 'Filhos por mulher',color='País')+
+  th
+
+ggmi<-ggplot(data=Gapminder_Varios,aes(y=cm,x=time,color=name))+
+  geom_line()+
+  ggtitle('Mortalitade Infantil por ano e país')+
+  scale_color_startrek()+
+  scale_x_continuous(breaks = seq(1800,2100,25))+
+  labs(x='Ano', y = 'Mortalitade Infantil',color='País',
+       caption = "Fonte: Gapminder Foundation")+
+  th
+
+ggtfr
+ggmi
+ggarr<-grid.arrange(ggtfr, ggmi,
+             ncol = 1, nrow = 2)
+
+```
+```{r} 
+brazil<-pop%>%
+  filter(year==2020 &
+           region=='Brazil' &
+           variant %in% c('Medium variant','Estimates'))%>%
+  group_by(year)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+usa<-pop%>%
+  filter(year==2020 &
+           region=='United States of America' &
+           variant %in% c('Medium variant','Estimates'))%>%
+  group_by(year)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+nigeria<-pop%>%
+  filter(year==2020 &
+           region=='Nigeria' &
+           variant %in% c('Medium variant','Estimates'))%>%
+  group_by(year)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+chile<-pop%>%
+  filter(year==2020 &
+           region=='Chile' &
+           variant %in% c('Medium variant','Estimates'))%>%
+  group_by(year)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        axis.text=element_text(size = 10),
+        axis.text.x=element_text(size = 10),
+        axis.text.y=element_text(size = 10))
+
+ggplot(data=chile,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019",
+       title='Chile',
+       subtitle='2020')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+
+ggplot(data=brazil,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019",
+       title='Brazil',
+       subtitle='2020')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+
+ggplot(data=nigeria,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019",
+       title='Nigeria',
+       subtitle='2020')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+
+ggplot(data=usa,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019",
+       title='United States of America',
+       subtitle='2020')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+```
+
+```{r}
+paises<-pop%>%
+  filter(year==2020 &
+           (region=='Nigeria'| region=='Brazil'|
+            region=='Japan'| region == 'United Kingdom'))%>%
+  mutate(region=factor(region,
+    levels=c("Brazil","Japan","Nigeria","United Kingdom")))%>%#,
+    #labels=c('Midgard','Vanaheim','Helheim','Asgard')))%>%
+  group_by(year,region)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        axis.text=element_text(size = 10),
+        axis.text.x=element_text(size = 10),
+        axis.text.y=element_text(size = 10))
+
+ggplot(data=paises,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  facet_wrap(~region)+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+
+paises<-pop%>%
+  filter(year==2020 &
+           (region=='Nigeria'| region=='Brazil'|
+            region=='Japan'| region == 'United Kingdom'))%>%
+  mutate(region=factor(region,
+    levels=c("Brazil","Japan","Nigeria","United Kingdom"),
+    labels=c('Midgard','Vanaheim','Helheim','Asgard')))%>%
+  group_by(year,region)%>%
+  mutate(poptotal=sum(pop))%>%
+  ungroup()%>%
+  mutate(poprel=pop/poptotal)%>%
+  mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+ggplot(data=paises,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  facet_wrap(~region)+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
+                      values=c('pink','blue'))+
+  th
+  
+```
+
+```{r}
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 11),
+        plot.subtitle = element_text(size=10),
+        legend.text = element_text(size = 8),
+        axis.text.x=element_text(size = 9),
+        axis.text.y=element_text(size = 8))
+
+temp<-pop%>%
+    filter(year %in% seq(1960,2020,20) & region=='Brazil')%>%
+    group_by(year,region)%>%
+    mutate(poptotal=sum(pop))%>%
+    ungroup()%>%
+    mutate(poprel=pop/poptotal)%>%
+    mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+
+ggplot(data=temp,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  facet_wrap(~year)+
+  labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+  ggtitle('Pirâmide Etária - Brazil')+
+  scale_y_continuous(name='População (%)',
+                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+                     breaks = seq(-.08,.08,.04),limits=c(-.08,.08))+
+  scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+  scale_fill_startrek(name='Sexo',label=c('Mulheres','Homens'))+
+  th
+
+```
+
+```{r}
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 24),
+        plot.subtitle = element_text(size=18),
+        legend.text = element_text(size = 20),
+        axis.text.x=element_text(size = 12),
+        axis.text.y=element_text(size = 12))
+
+
+for(p in c("Brazil","Japan","Nigeria","United Kingdom")){
+  
+  df<-pop%>%
+    filter(year==2020 & region==p)%>%
+    group_by(year)%>%
+    mutate(poptotal=sum(pop))%>%
+    ungroup()%>%
+    mutate(poprel=pop/poptotal)%>%
+    mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+  
+  ggp<-ggplot(data=df,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+    geom_bar(stat='identity')+
+    coord_flip()+
+    labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+    ggtitle('Pirâmide Etária',subtitle=paste(p,'- 2020'))+
+    scale_y_continuous(name='População (%)',
+                       labels=label_percent(big.mark = '.',decimal.mark = ','),
+                       breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+    scale_x_discrete(name='Grupo de Idade')+
+    scale_fill_startrek(name='Sexo',label=c('Mulheres','Homens'))+
+    th
+  
+  pf<-paste0('./piramides/',p,'-2020.png')
+  ggsave(pf,plot=ggp,width = 20, height = 14, dpi = 300, 
+         units = "cm", device='png')
+}
+
+```
+
+```{r}
+
+th<-theme_ipsum()+
+  theme(plot.title = element_text(size = 24),
+        plot.subtitle = element_text(size=18),
+        legend.text = element_text(size = 12),
+        axis.text.x=element_text(size = 10),
+        axis.text.y=element_text(size = 10))
+
+for(p in c("Brazil","Japan","Nigeria","United Kingdom")){
+  
+  df<-pop%>%
+    filter(year %in% seq(1960,2020,20) & region==p)%>%
+    group_by(year,region)%>%
+    mutate(poptotal=sum(pop))%>%
+    ungroup()%>%
+    mutate(poprel=pop/poptotal)%>%
+    mutate(poprel=if_else(sex=='Male',-poprel,poprel))
+  
+  ggp<-ggplot(data=df,aes(x=idgr,y=poprel,group=sex,fill=sex))+
+    geom_bar(stat='identity')+
+    facet_wrap(~year)+
+    coord_flip()+
+    labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
+    ggtitle('Pirâmide Etária',subtitle=paste(p,'- 1960 a 2020'))+
+    scale_y_continuous(name='População (%)',
+                       labels=label_percent(big.mark = '.',decimal.mark = ','),
+                       breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
+    scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
+    scale_fill_startrek(name='Sexo',label=c('Mulheres','Homens'))+
+    th
+  
+  pf<-paste0('./piramides/',p,'-1960a2020.png')
+  ggsave(pf,plot=ggp,width = 20, height = 14, dpi = 300, units = "cm", device='png')
+}
+
+#knitr::purl('Descrevendo_dados.Rmd')
+```
+
+
