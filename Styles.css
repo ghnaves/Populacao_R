@@ -1,0 +1,48 @@
+#TOC {
+  color:#708090;
+  font-family: Calibri;
+  font-size: 16px;
+  border-color: #708090;
+}
+
+#header {
+  font-family: Calibri;
+  font-size: 20px;
+}
+
+dicas {
+  font-family: Times, sans-serif;
+  font-size: 12px;
+  font-style: italic;
+  background-color: #F5F5F5;
+  border-color: #708090;
+}
+
+
+body {
+    color: #333333;
+    font-family: Times, sans-serif;
+    size: 14px;
+}
+
+ .title {
+  font-family: Calibri;
+  font-size: 48px;
+}
+ .author {
+  font-family: Calibri;
+  font-size: 16px;
+}
+.subtitle {
+   font-family: Calibri;
+  font-size: 20px; 
+}
+ .date {
+  font-family: Calibri;
+  font-size: 16px;
+}
+
+.affiliation {
+  font-family: Calibri;
+  font-size: 16px;
+}
