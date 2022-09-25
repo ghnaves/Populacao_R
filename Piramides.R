@@ -161,11 +161,12 @@ ggplot(data=chile,aes(x=idgr,y=poprel,group=sex,fill=sex))+
   th
 
 paises<-pop%>%
-  filter(year==2020 &
+  filter(year==2025 &
            (region=='EUROPE'
             | region=='SUB-SAHARAN AFRICA'
             | region=='CENTRAL AND SOUTHERN ASIA'
-            | region == 'NORTHERN AMERICA'))%>%
+            | region == 'NORTHERN AMERICA') &
+           variant=='Medium variant')%>%
   mutate(region=factor(region,
                        levels=c("EUROPE",
                                 "SUB-SAHARAN AFRICA",
@@ -193,9 +194,25 @@ ggplot(data=paises,aes(x=idgr,y=poprel,group=sex,fill=sex))+
   facet_wrap(~region)+
   labs(caption = "Fonte: United Nations. World Population Prospects 2019")+
   scale_y_continuous(name='População (%)',
-                     labels=label_percent(big.mark = '.',decimal.mark = ','),
+  labels=label_percent(big.mark = '.',decimal.mark = ','),
                      breaks = seq(-.1,.1,.04),limits=c(-.1,.1))+
   scale_x_discrete(name='Grupo de Idade',breaks=levels(pop$idgr)[seq(1,19,2)])+
   scale_fill_manual(name='Sexo',label=c('Mulheres','Homens'),
                     values=c('pink','blue'))+
   th
+
+if (interactive()) {
+p<-ggplot(paises) +
+  aes(x = idgr, y = poprel, fill = sex) +
+  geom_col() +
+  scale_fill_manual(values = c(Female = "#F6C7E3", 
+                               Male = "#8F8EFF")) +
+  coord_flip() +
+  theme_minimal() +
+  facet_wrap(vars(region))
+
+ggplot_to_ppt("p")
+}
+
+
+
